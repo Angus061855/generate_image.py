@@ -24,7 +24,7 @@ def get_pending_pages():
             "database_id": DATABASE_ID,
             "filter": {
                 "property": "狀態",
-                "select": {"equals": "待發"}
+                "status": {"equals": "待發"}
             }
         }
     )
