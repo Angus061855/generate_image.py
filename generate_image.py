@@ -18,21 +18,22 @@ cloudinary.config(
 )
 
 def get_pending_pages():
+    # ✅ 修正：改用 notion.databases.query 並傳入 database_id 作為位置參數
     response = notion.databases.query(
-        database_id=DATABASE_ID,
-        filter={
-            "property": "狀態",
-            "select": {"equals": "待發"}
+        **{
+            "database_id": DATABASE_ID,
+            "filter": {
+                "property": "狀態",
+                "select": {"equals": "待發"}
+            }
         }
     )
     return response["results"]
 
 def generate_image(text):
-    # 載入背景圖
     bg = Image.open("back.png").convert("RGBA")
     draw = ImageDraw.Draw(bg)
 
-    # 字型設定（白色，統一大小）
     try:
         font = ImageFont.truetype("NotoSansTC-Bold.ttf", 60)
         small_font = ImageFont.truetype("NotoSansTC-Bold.ttf", 30)
@@ -42,7 +43,6 @@ def generate_image(text):
 
     W, H = bg.size
 
-    # 文字換行處理
     lines = text.split("\n")
     line_height = 80
     total_height = len(lines) * line_height
@@ -55,13 +55,11 @@ def generate_image(text):
         draw.text((x, y), line, font=font, fill="white")
         y += line_height
 
-    # 底部 @帳號
     account = "@angus061855"
     bbox = draw.textbbox((0, 0), account, font=small_font)
     acc_w = bbox[2] - bbox[0]
     draw.text(((W - acc_w) // 2, H - 80), account, font=small_font, fill="white")
 
-    # 儲存到記憶體
     img_byte_arr = io.BytesIO()
     bg.save(img_byte_arr, format="PNG")
     img_byte_arr.seek(0)
@@ -94,7 +92,6 @@ def main():
         page_id = page["id"]
         props = page["properties"]
 
-        # 取得主題（圖片文字）
         title_list = props.get("主題", {}).get("title", [])
         topic = title_list[0]["plain_text"] if title_list else ""
 
@@ -104,14 +101,11 @@ def main():
 
         print(f"處理：{topic}")
 
-        # 生成圖片
         image_bytes = generate_image(topic)
 
-        # 上傳到 Cloudinary
         safe_id = page_id.replace("-", "")
         image_url = upload_to_cloudinary(image_bytes, f"ig_post_{safe_id}")
 
-        # 更新 Notion 圖片網址
         update_notion_image_url(page_id, image_url)
         print(f"圖片已上傳：{image_url}")
 
