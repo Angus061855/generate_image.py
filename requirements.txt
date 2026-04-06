@@ -1,0 +1,4 @@
+Pillow
+requests
+cloudinary
+google-generativeai
