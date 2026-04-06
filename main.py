@@ -2,8 +2,8 @@ import os
 import requests
 import cloudinary
 import cloudinary.uploader
-from generate_image import generate_image
-from generate_caption import generate_caption
+from img_generator import create_image
+from caption_generator import create_caption
 
 # ===== 環境變數 =====
 NOTION_API_KEY = os.environ.get("NOTION_API_KEY")
@@ -16,7 +16,6 @@ IG_ACCOUNT_ID = os.environ.get("IG_ACCOUNT_ID")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
-# Cloudinary 設定
 cloudinary.config(
     cloud_name=CLOUDINARY_CLOUD_NAME,
     api_key=CLOUDINARY_API_KEY,
@@ -31,7 +30,6 @@ NOTION_HEADERS = {
 
 
 def get_pending_posts():
-    """從 Notion 取得狀態為「待發」的文章"""
     url = f"https://api.notion.com/v1/databases/{NOTION_DATABASE_ID}/query"
     payload = {
         "filter": {
@@ -46,27 +44,17 @@ def get_pending_posts():
 
 
 def get_text_from_page(page):
-    """從 Notion page 取得「文字」欄位"""
     text_prop = page["properties"].get("文字", {})
     rich_texts = text_prop.get("rich_text", [])
     return "".join([rt["plain_text"] for rt in rich_texts])
 
 
-def get_topic_from_page(page):
-    """從 Notion page 取得「主題」欄位"""
-    topic_prop = page["properties"].get("主題", {})
-    rich_texts = topic_prop.get("rich_text", [])
-    return "".join([rt["plain_text"] for rt in rich_texts])
-
-
 def upload_to_cloudinary(image_path):
-    """上傳圖片到 Cloudinary"""
     result = cloudinary.uploader.upload(image_path)
     return result["secure_url"]
 
 
 def update_notion_page(page_id, image_url, caption):
-    """更新 Notion 頁面：圖片網址、文案、狀態"""
     url = f"https://api.notion.com/v1/pages/{page_id}"
     payload = {
         "properties": {
@@ -75,9 +63,6 @@ def update_notion_page(page_id, image_url, caption):
             },
             "文案": {
                 "rich_text": [{"text": {"content": caption[:2000]}}]
-            },
-            "狀態": {
-                "status": {"name": "待發"}
             }
         }
     }
@@ -85,8 +70,6 @@ def update_notion_page(page_id, image_url, caption):
 
 
 def post_to_instagram(image_url, caption):
-    """發布到 Instagram"""
-    # Step 1: 建立媒體容器
     create_url = f"https://graph.facebook.com/v19.0/{IG_ACCOUNT_ID}/media"
     create_payload = {
         "image_url": image_url,
@@ -100,7 +83,6 @@ def post_to_instagram(image_url, caption):
         print(f"IG 建立媒體失敗：{res.json()}")
         return False
 
-    # Step 2: 發布
     publish_url = f"https://graph.facebook.com/v19.0/{IG_ACCOUNT_ID}/media_publish"
     publish_payload = {
         "creation_id": creation_id,
@@ -112,7 +94,6 @@ def post_to_instagram(image_url, caption):
 
 
 def update_status_published(page_id):
-    """更新 Notion 狀態為已發布"""
     url = f"https://api.notion.com/v1/pages/{page_id}"
     payload = {
         "properties": {
@@ -123,7 +104,6 @@ def update_status_published(page_id):
 
 
 def send_telegram_notification(message):
-    """發送 Telegram 通知"""
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
     requests.post(url, json=payload)
@@ -145,21 +125,33 @@ def main():
 
     print(f"處理文章：{text[:30]}...")
 
-    # Step 1: 生成圖片
-    image_path = generate_image(text, "output.png")
+    # Step 1: 檢查是否已有圖片網址
+    existing_url = page["properties"].get("圖片網址", {}).get("url")
 
-    # Step 2: 上傳 Cloudinary
-    image_url = upload_to_cloudinary(image_path)
-    print(f"圖片上傳成功：{image_url}")
+    if existing_url:
+        image_url = existing_url
+        print(f"已有圖片，跳過生成：{image_url}")
+    else:
+        # 生成圖片
+        image_path = create_image(text, "output.png")
+        image_url = upload_to_cloudinary(image_path)
+        print(f"圖片上傳成功：{image_url}")
 
-    # Step 3: 生成文案
-    caption = generate_caption(text)
-    print(f"文案生成完成：{caption[:50]}...")
+    # Step 2: 檢查是否已有文案
+    existing_caption_parts = page["properties"].get("文案", {}).get("rich_text", [])
+    existing_caption = "".join([rt["plain_text"] for rt in existing_caption_parts])
 
-    # Step 4: 更新 Notion（圖片網址 + 文案）
+    if existing_caption:
+        caption = existing_caption
+        print(f"已有文案，跳過生成")
+    else:
+        caption = create_caption(text)
+        print(f"文案生成完成：{caption[:50]}...")
+
+    # Step 3: 更新 Notion
     update_notion_page(page_id, image_url, caption)
 
-    # Step 5: 發布 IG
+    # Step 4: 發布 IG
     success = post_to_instagram(image_url, caption)
 
     if success:
