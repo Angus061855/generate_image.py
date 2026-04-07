@@ -30,6 +30,40 @@ NOTION_HEADERS = {
     "Notion-Version": "2022-06-28"
 }
 
+# ========== 字元檢查 ==========
+def has_unsupported_chars(text, font_size=40):
+    """檢查文字是否有不支援的字元，回傳不支援的字元清單"""
+    try:
+        font = ImageFont.truetype("ChiKuSung.otf", font_size)
+    except:
+        return list(text)
+    
+    unsupported = []
+    test_img = Image.new("RGB", (200, 200))
+    test_draw = ImageDraw.Draw(test_img)
+    
+    for char in text:
+        if char in " \n，。？！、「」《》…：":
+            continue
+        bbox = test_draw.textbbox((0, 0), char, font=font)
+        if bbox[2] - bbox[0] == 0:
+            unsupported.append(char)
+    
+    return unsupported
+
+
+def update_notion_status_failed(page_id, error_msg):
+    """更新 Notion 狀態為失敗"""
+    url = f"https://api.notion.com/v1/pages/{page_id}"
+    payload = {
+        "properties": {
+            "狀態": {"status": {"name": "失敗"}},
+            "備註": {
+                "rich_text": [{"text": {"content": error_msg}}]
+            }
+        }
+    }
+    requests.patch(url, headers=NOTION_HEADERS, json=payload)
 
 # ========== 圖片生成 ==========
 def create_image(text, output_path="output.png"):
@@ -271,6 +305,15 @@ def main():
         image_url = existing_url
         print(f"已有圖片，跳過生成：{image_url}")
     else:
+        # ✅ 先檢查字元是否支援
+        unsupported = has_unsupported_chars(text)
+        if unsupported:
+            error_msg = f"字型不支援以下字元：{''.join(set(unsupported))}"
+            print(f"❌ {error_msg}")
+            update_notion_status_failed(page_id, error_msg)
+            send_telegram_notification(f"❌ 發布失敗（字型問題）\n{error_msg}\n\n文字：{text[:50]}...")
+            return
+
         image_path = create_image(text, "output.png")
         image_url = upload_to_cloudinary(image_path)
         print(f"圖片上傳成功：{image_url}")
