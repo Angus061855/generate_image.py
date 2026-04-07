@@ -45,6 +45,27 @@ def create_image(text, output_path="output.png"):
     lines = text.strip().split("\n")
     lines = [line.strip() for line in lines if line.strip()]
 
+    # 設定最大文字寬度（控制內縮）
+    max_text_width = int(width * 0.65)
+
+    # 自動換行
+    wrapped_lines = []
+    for line in lines:
+        words = list(line)
+        current_line = ""
+        for char in words:
+            test_line = current_line + char
+            bbox = draw.textbbox((0, 0), test_line, font=main_font)
+            if bbox[2] - bbox[0] > max_text_width and current_line:
+                wrapped_lines.append(current_line)
+                current_line = char
+            else:
+                current_line = test_line
+        if current_line:
+            wrapped_lines.append(current_line)
+
+    lines = wrapped_lines
+
     line_heights = []
     for line in lines:
         bbox = draw.textbbox((0, 0), line, font=main_font)
@@ -73,6 +94,7 @@ def create_image(text, output_path="output.png"):
     bg.convert("RGB").save(output_path, "PNG")
     print(f"圖片已生成：{output_path}")
     return output_path
+
 
 
 # ========== 文案生成 ==========
