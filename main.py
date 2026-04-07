@@ -100,9 +100,10 @@ def create_image(text, output_path="output.png"):
     lines = text.strip().split("\n")
     lines = [line.strip() for line in lines if line.strip()]
 
-    max_text_width = int(width * 0.65)
+    margin = int(width * 0.10)  # 左右各留 10%
+    max_text_width = width - (margin * 2)  # 可用寬度 = 80%
 
-    font_size = int(width * 0.10)
+    font_size = int(width * 0.18)
     while font_size > 20:
         main_font = ImageFont.truetype("ChiKuSung.otf", font_size)
         too_wide = False
@@ -123,7 +124,7 @@ def create_image(text, output_path="output.png"):
         bbox = draw.textbbox((0, 0), line, font=main_font)
         line_heights.append(bbox[3] - bbox[1])
 
-    line_spacing = int(font_size * 0.6)
+    line_spacing = int(font_size * 0.5)
     total_text_height = sum(line_heights) + line_spacing * (len(lines) - 1)
 
     start_y = (height - total_text_height) // 2 - int(height * 0.05)
