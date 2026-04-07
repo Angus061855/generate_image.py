@@ -1,5 +1,6 @@
 import time
 import os
+import random
 import requests
 import cloudinary
 import cloudinary.uploader
@@ -32,28 +33,27 @@ NOTION_HEADERS = {
 
 # ========== 字元檢查 ==========
 def has_unsupported_chars(text, font_size=40):
-    """檢查文字是否有不支援的字元，回傳不支援的字元清單"""
     try:
         font = ImageFont.truetype("ChiKuSung.otf", font_size)
     except:
         return list(text)
-    
+
     unsupported = []
     test_img = Image.new("RGB", (200, 200))
     test_draw = ImageDraw.Draw(test_img)
-    
+
     for char in text:
         if char in " \n，。？！、「」《》…：":
             continue
         bbox = test_draw.textbbox((0, 0), char, font=font)
         if bbox[2] - bbox[0] == 0:
             unsupported.append(char)
-    
+
     return unsupported
 
 
+# ========== Notion 狀態更新 ==========
 def update_notion_status_failed(page_id, error_msg):
-    """更新 Notion 狀態為失敗"""
     url = f"https://api.notion.com/v1/pages/{page_id}"
     payload = {
         "properties": {
@@ -64,6 +64,30 @@ def update_notion_status_failed(page_id, error_msg):
         }
     }
     requests.patch(url, headers=NOTION_HEADERS, json=payload)
+
+
+def update_status_publishing(page_id):
+    """先鎖定這筆，防止排程重複抓到同一筆"""
+    url = f"https://api.notion.com/v1/pages/{page_id}"
+    payload = {
+        "properties": {
+            "狀態": {"status": {"name": "進行中"}}
+        }
+    }
+    requests.patch(url, headers=NOTION_HEADERS, json=payload)
+    print(f"已將狀態改為發布中，page_id：{page_id}")
+
+
+def update_status_published(page_id):
+    url = f"https://api.notion.com/v1/pages/{page_id}"
+    payload = {
+        "properties": {
+            "狀態": {"status": {"name": "已發"}}
+        }
+    }
+    res = requests.patch(url, headers=NOTION_HEADERS, json=payload)
+    print(f"Notion 狀態更新結果：{res.status_code} / {res.json()}")
+
 
 # ========== 圖片生成 ==========
 def create_image(text, output_path="output.png"):
@@ -76,10 +100,8 @@ def create_image(text, output_path="output.png"):
     lines = text.strip().split("\n")
     lines = [line.strip() for line in lines if line.strip()]
 
-    # ✅ 最大可用寬度（左右各留 17.5% 空白）
     max_text_width = int(width * 0.65)
 
-    # ✅ 自動找合適字體大小：從大到小試，直到每行都放得下
     font_size = int(width * 0.10)
     while font_size > 20:
         main_font = ImageFont.truetype("ChiKuSung.otf", font_size)
@@ -126,8 +148,6 @@ def create_image(text, output_path="output.png"):
     return output_path
 
 
-
-
 # ========== 文案生成 ==========
 def create_caption(topic_text):
     client = genai.Client(api_key=GEMINI_API_KEY)
@@ -154,16 +174,6 @@ def create_caption(topic_text):
 - 每行不超過 18 個字
 - 段落之間空一行
 - 請直接輸出文案，不要加任何前綴說明。
-
-範例格式：
-其實這個世界藏著一個秘密。
-
-你有沒有發現，
-有時候你剛想到一個人，
-對方就剛好傳訊息來？
-
-這不是巧合。
-這是你從來沒被告知的真相。
 """
 
     response = client.models.generate_content(
@@ -174,19 +184,22 @@ def create_caption(topic_text):
     return caption
 
 
-# ========== Notion 操作 ==========
+# ========== Notion 查詢 ==========
 def get_pending_posts():
+    """抓所有待發，最多 100 筆"""
     url = f"https://api.notion.com/v1/databases/{NOTION_DATABASE_ID}/query"
     payload = {
         "filter": {
             "property": "狀態",
             "status": {"equals": "待發"}
         },
-        "page_size": 1
+        "page_size": 100
     }
     res = requests.post(url, headers=NOTION_HEADERS, json=payload)
     data = res.json()
-    return data.get("results", [])
+    results = data.get("results", [])
+    print(f"找到 {len(results)} 筆待發文章")
+    return results
 
 
 def get_text_from_page(page):
@@ -204,9 +217,7 @@ def update_notion_page(page_id, image_url, caption):
     url = f"https://api.notion.com/v1/pages/{page_id}"
     payload = {
         "properties": {
-            "圖片網址": {
-                "url": image_url
-            },
+            "圖片網址": {"url": image_url},
             "文案": {
                 "rich_text": [{"text": {"content": caption[:2000]}}]
             }
@@ -215,8 +226,7 @@ def update_notion_page(page_id, image_url, caption):
     requests.patch(url, headers=NOTION_HEADERS, json=payload)
 
 
-import time
-
+# ========== IG 發布 ==========
 def post_to_instagram(image_url, caption):
     create_url = f"https://graph.facebook.com/v19.0/{IG_ACCOUNT_ID}/media"
     create_payload = {
@@ -231,7 +241,6 @@ def post_to_instagram(image_url, caption):
         print(f"IG 建立媒體失敗：{res.json()}")
         return False
 
-    # ✅ 等待 IG 處理圖片，最多重試 10 次
     check_url = f"https://graph.facebook.com/v19.0/{creation_id}"
     check_params = {
         "fields": "status_code",
@@ -239,7 +248,7 @@ def post_to_instagram(image_url, caption):
     }
 
     for attempt in range(10):
-        time.sleep(5)  # 每次等 5 秒
+        time.sleep(5)
         check_res = requests.get(check_url, params=check_params)
         status = check_res.json().get("status_code")
         print(f"第 {attempt+1} 次確認狀態：{status}")
@@ -253,7 +262,6 @@ def post_to_instagram(image_url, caption):
         print("等待超時，圖片一直沒準備好")
         return False
 
-    # ✅ 確認好了才發布
     publish_url = f"https://graph.facebook.com/v19.0/{IG_ACCOUNT_ID}/media_publish"
     publish_payload = {
         "creation_id": creation_id,
@@ -262,18 +270,6 @@ def post_to_instagram(image_url, caption):
     pub_res = requests.post(publish_url, data=publish_payload)
     print(f"IG 發布結果：{pub_res.json()}")
     return pub_res.json().get("id") is not None
-
-
-
-def update_status_published(page_id):
-    url = f"https://api.notion.com/v1/pages/{page_id}"
-    payload = {
-        "properties": {
-            "狀態": {"status": {"name": "已發"}}
-        }
-    }
-    res = requests.patch(url, headers=NOTION_HEADERS, json=payload)
-    print(f"Notion 狀態更新結果：{res.status_code} / {res.json()}")
 
 
 def send_telegram_notification(message):
@@ -289,7 +285,8 @@ def main():
         print("沒有待發文章")
         return
 
-    page = posts[0]
+    # ✅ 隨機挑一筆
+    page = random.choice(posts)
     page_id = page["id"]
     text = get_text_from_page(page)
 
@@ -297,38 +294,27 @@ def main():
         print("文字欄位為空，跳過")
         return
 
-    print(f"處理文章：{text[:30]}...")
+    print(f"隨機選中：{text[:30]}...")
 
-    # Step 1: 檢查是否已有圖片
-    existing_url = page["properties"].get("圖片網址", {}).get("url")
+    # ✅ 立刻鎖定這筆，防止重複發文
+    update_status_publishing(page_id)
 
-    if existing_url:
-        image_url = existing_url
-        print(f"已有圖片，跳過生成：{image_url}")
-    else:
-        # ✅ 先檢查字元是否支援
-        unsupported = has_unsupported_chars(text)
-        if unsupported:
-            error_msg = f"字型不支援以下字元：{''.join(set(unsupported))}"
-            print(f"❌ {error_msg}")
-            update_notion_status_failed(page_id, error_msg)
-            send_telegram_notification(f"❌ 發布失敗（字型問題）\n{error_msg}\n\n文字：{text[:50]}...")
-            return
+    # Step 1: 生成圖片
+    unsupported = has_unsupported_chars(text)
+    if unsupported:
+        error_msg = f"字型不支援以下字元：{''.join(set(unsupported))}"
+        print(f"❌ {error_msg}")
+        update_notion_status_failed(page_id, error_msg)
+        send_telegram_notification(f"❌ 發布失敗（字型問題）\n{error_msg}\n\n文字：{text[:50]}...")
+        return
 
-        image_path = create_image(text, "output.png")
-        image_url = upload_to_cloudinary(image_path)
-        print(f"圖片上傳成功：{image_url}")
+    image_path = create_image(text, "output.png")
+    image_url = upload_to_cloudinary(image_path)
+    print(f"圖片上傳成功：{image_url}")
 
-    # Step 2: 檢查是否已有文案
-    existing_caption_parts = page["properties"].get("文案", {}).get("rich_text", [])
-    existing_caption = "".join([rt["plain_text"] for rt in existing_caption_parts])
-
-    if existing_caption:
-        caption = existing_caption
-        print("已有文案，跳過生成")
-    else:
-        caption = create_caption(text)
-        print(f"文案生成完成：{caption[:50]}...")
+    # Step 2: 生成文案
+    caption = create_caption(text)
+    print(f"文案生成完成：{caption[:50]}...")
 
     # Step 3: 更新 Notion
     update_notion_page(page_id, image_url, caption)
@@ -341,6 +327,7 @@ def main():
         send_telegram_notification(f"✅ IG 發布成功！\n\n{text[:50]}...")
         print("發布成功！")
     else:
+        update_notion_status_failed(page_id, "IG 發布失敗")
         send_telegram_notification(f"❌ IG 發布失敗\n\n{text[:50]}...")
         print("發布失敗")
 
