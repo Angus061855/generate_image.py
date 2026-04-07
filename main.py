@@ -269,10 +269,11 @@ def update_status_published(page_id):
     url = f"https://api.notion.com/v1/pages/{page_id}"
     payload = {
         "properties": {
-            "狀態": {"status": {"name": "已發布"}}
+            "狀態": {"status": {"name": "已發"}}
         }
     }
-    requests.patch(url, headers=NOTION_HEADERS, json=payload)
+    res = requests.patch(url, headers=NOTION_HEADERS, json=payload)
+    print(f"Notion 狀態更新結果：{res.status_code} / {res.json()}")
 
 
 def send_telegram_notification(message):
