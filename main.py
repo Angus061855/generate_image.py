@@ -176,7 +176,7 @@ def create_caption(topic_text):
 - 請直接輸出文案，不要加任何前綴說明。
 """
 
-   attempt = 0
+    attempt = 0
     while True:
         attempt += 1
         try:
