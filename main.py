@@ -34,7 +34,7 @@ NOTION_HEADERS = {
 # ========== 字元檢查 ==========
 def has_unsupported_chars(text, font_size=40):
     try:
-        font = ImageFont.truetype("辰宇落雁體.ttf", font_size)
+        font = ImageFont.truetype("ChenYuluoyan-2.0-Thin.ttf", font_size)
     except Exception as e:
         print(f"字體載入失敗：{e}")
         return list(text)
