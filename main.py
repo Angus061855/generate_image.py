@@ -1,3 +1,4 @@
+import time
 import os
 import requests
 import cloudinary
@@ -171,6 +172,8 @@ def update_notion_page(page_id, image_url, caption):
     requests.patch(url, headers=NOTION_HEADERS, json=payload)
 
 
+import time
+
 def post_to_instagram(image_url, caption):
     create_url = f"https://graph.facebook.com/v19.0/{IG_ACCOUNT_ID}/media"
     create_payload = {
@@ -185,6 +188,29 @@ def post_to_instagram(image_url, caption):
         print(f"IG 建立媒體失敗：{res.json()}")
         return False
 
+    # ✅ 等待 IG 處理圖片，最多重試 10 次
+    check_url = f"https://graph.facebook.com/v19.0/{creation_id}"
+    check_params = {
+        "fields": "status_code",
+        "access_token": IG_ACCESS_TOKEN
+    }
+
+    for attempt in range(10):
+        time.sleep(5)  # 每次等 5 秒
+        check_res = requests.get(check_url, params=check_params)
+        status = check_res.json().get("status_code")
+        print(f"第 {attempt+1} 次確認狀態：{status}")
+
+        if status == "FINISHED":
+            break
+        elif status == "ERROR":
+            print("IG 圖片處理失敗")
+            return False
+    else:
+        print("等待超時，圖片一直沒準備好")
+        return False
+
+    # ✅ 確認好了才發布
     publish_url = f"https://graph.facebook.com/v19.0/{IG_ACCOUNT_ID}/media_publish"
     publish_payload = {
         "creation_id": creation_id,
@@ -193,6 +219,7 @@ def post_to_instagram(image_url, caption):
     pub_res = requests.post(publish_url, data=publish_payload)
     print(f"IG 發布結果：{pub_res.json()}")
     return pub_res.json().get("id") is not None
+
 
 
 def update_status_published(page_id):
