@@ -34,7 +34,7 @@ NOTION_HEADERS = {
 # ========== 字元檢查 ==========
 def has_unsupported_chars(text, font_size=40):
     try:
-        font = ImageFont.truetype("PingFangTC-Regular.otf", font_size)
+        font = ImageFont.truetype("漢字之美仿宋.ttf", font_size)
     except:
         return list(text)
 
@@ -115,7 +115,7 @@ def create_image(text, output_path="output.png"):
 
     font_size = int(width * 0.18)
     while font_size > 20:
-        main_font = ImageFont.truetype("PingFangTC-Regular.otf", font_size)
+        main_font = ImageFont.truetype("漢字之美仿宋.ttf", font_size)
         too_wide = False
         for line in lines:
             if get_line_width(line, main_font, letter_spacing) > max_text_width:
@@ -125,8 +125,8 @@ def create_image(text, output_path="output.png"):
             break
         font_size -= 2
 
-    main_font = ImageFont.truetype("PingFangTC-Regular.otf", font_size)
-    watermark_font = ImageFont.truetype("PingFangTC-Regular.otf", watermark_font_size)
+    main_font = ImageFont.truetype("漢字之美仿宋.ttf", font_size)
+    watermark_font = ImageFont.truetype("漢字之美仿宋.ttf", watermark_font_size)
 
     line_heights = []
     for line in lines:
