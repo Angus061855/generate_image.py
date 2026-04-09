@@ -359,11 +359,11 @@ def main():
 
     if success:
         update_status_published(page_id)
-        send_telegram_notification(f"✅ IG 發布成功！\n\n{text[:50]}...")
+        send_telegram_notification(f"✅ angus IG 發布成功！\n\n{text[:50]}...")
         print("發布成功！")
     else:
         update_notion_status_failed(page_id, "IG 發布失敗")
-        send_telegram_notification(f"❌ IG 發布失敗\n\n{text[:50]}...")
+        send_telegram_notification(f"❌ angus IG 發布失敗\n\n{text[:50]}...")
         print("發布失敗")
 
 
