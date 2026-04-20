@@ -118,17 +118,7 @@ def create_image(text, output_path="output.png"):
             total += (bbox[2] - bbox[0]) + spacing
         return total - spacing
 
-    font_size = int(width * 0.18)
-    while font_size > 20:
-        main_font = ImageFont.truetype("漢字之美仿宋.ttf", font_size)
-        too_wide = False
-        for line in lines:
-            if get_line_width(line, main_font, letter_spacing) > max_text_width:
-                too_wide = True
-                break
-        if not too_wide:
-            break
-        font_size -= 2
+    font_size = 62
 
     main_font = ImageFont.truetype("漢字之美仿宋.ttf", font_size)
     watermark_font = ImageFont.truetype("漢字之美仿宋.ttf", watermark_font_size)
